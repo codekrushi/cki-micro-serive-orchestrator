@@ -1,0 +1,20 @@
+{
+  "name": "cki-micro-service-orchestrator-demo",
+  "version": "1.0.0",
+  "description": "Demo Node.js microservice orchestration with MongoDB and Redis Pub/Sub.",
+  "main": "src/demo.js",
+  "scripts": {
+    "start": "node src/demo.js",
+    "dev": "nodemon src/demo.js"
+  },
+  "author": "Demo Architect",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.4.0",
+    "mongoose": "^7.7.1",
+    "redis": "^5.2.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
