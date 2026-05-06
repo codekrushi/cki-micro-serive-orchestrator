@@ -1,18 +1,103 @@
 const connectDb = require('./db');
-const salesService = require('./services/SalesService');
+const http = require('http');
 const inventoryService = require('./services/InventoryService');
 const billingService = require('./services/BillingService');
 const dispatchService = require('./services/DispatchService');
+const { startIdentityServer } = require('./identityServer');
+const { startApiGateway } = require('./apiGateway');
+
+const sendJsonRequest = (options, body) => {
+  return new Promise((resolve, reject) => {
+    const requestBody = body ? JSON.stringify(body) : undefined;
+    const requestOptions = {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options.headers || {})
+      }
+    };
+
+    const req = http.request(requestOptions, (res) => {
+      let data = '';
+      res.on('data', (chunk) => {
+        data += chunk.toString();
+      });
+      res.on('end', () => {
+        try {
+          const parsed = data ? JSON.parse(data) : {};
+          if (res.statusCode >= 400) {
+            return reject(new Error(`${res.statusCode}: ${parsed.message || data}`));
+          }
+          resolve(parsed);
+        } catch (error) {
+          reject(error);
+        }
+      });
+    });
+
+    req.on('error', reject);
+    if (requestBody) {
+      req.write(requestBody);
+    }
+    req.end();
+  });
+};
+
+const login = async (username, password) => {
+  return sendJsonRequest(
+    {
+      hostname: 'localhost',
+      port: 4001,
+      path: '/auth/login',
+      method: 'POST'
+    },
+    { username, password }
+  );
+};
+
+const createOrder = async (token, orderPayload) => {
+  return sendJsonRequest(
+    {
+      hostname: 'localhost',
+      port: 3000,
+      path: '/api/sales/orders',
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    },
+    orderPayload
+  );
+};
+
+const approveQc = async (token, approvalPayload) => {
+  return sendJsonRequest(
+    {
+      hostname: 'localhost',
+      port: 3000,
+      path: '/api/qc/approve',
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    },
+    approvalPayload
+  );
+};
 
 const runDemo = async () => {
   await connectDb();
+  await startIdentityServer();
+  await startApiGateway();
 
   inventoryService.initInventoryListeners();
   billingService.initBillingListeners();
   dispatchService.initDispatchListeners();
 
-  const textileOrder = {
-    tenantId: 'tenant_101',
+  console.log('[Demo] Logging in Sales user');
+  const salesAuth = await login('sales@tenant101.local', 'Sales123!');
+
+  const textileOrderPayload = {
     articleId: 'ARTICLE-RED-1000',
     quantity: 1000,
     dynamicAttributes: {
@@ -23,11 +108,10 @@ const runDemo = async () => {
     }
   };
 
-  const newOrder = await salesService.createSalesOrder(textileOrder);
-  console.log(`\n[Demo] Created textile sales order ${newOrder._id} for article ${newOrder.articleId}\n`);
+  const createdTextileOrder = await createOrder(salesAuth.token, textileOrderPayload);
+  console.log(`\n[Demo] Created textile sales order ${createdTextileOrder.order._id} via API Gateway`);
 
-  const solarOrder = await salesService.createSalesOrder({
-    tenantId: 'tenant_202',
+  const solarOrderPayload = {
     articleId: 'ARTICLE-SOLAR-400W',
     quantity: 50,
     dynamicAttributes: {
@@ -36,22 +120,33 @@ const runDemo = async () => {
       CellType: 'Monocrystalline',
       MountType: 'Rooftop'
     }
-  });
-  console.log(`\n[Demo] Created solar sales order ${solarOrder._id} for article ${solarOrder.articleId}\n`);
+  };
+
+  const createdSolarOrder = await createOrder(salesAuth.token, solarOrderPayload);
+  console.log(`\n[Demo] Created solar sales order ${createdSolarOrder.order._id} via API Gateway`);
 
   setTimeout(async () => {
-    await inventoryService.approveQC(newOrder._id, {
-      actualLength: 980,
-      variance: { GSM: 2, width: 0.5 }
+    console.log('[Demo] Logging in QC user');
+    const qcAuth = await login('qc@tenant101.local', 'QC123!');
+    await approveQc(qcAuth.token, {
+      orderId: createdTextileOrder.order._id,
+      qcResults: {
+        actualLength: 980,
+        variance: { GSM: 2, width: 0.5 }
+      }
     });
-  }, 1000);
+  }, 1200);
 
   setTimeout(async () => {
-    await inventoryService.approveQC(solarOrder._id, {
-      actualLength: 50,
-      variance: { Wattage: '400W', Efficiency: '21%' }
+    const qcAuth = await login('qc@tenant101.local', 'QC123!');
+    await approveQc(qcAuth.token, {
+      orderId: createdSolarOrder.order._id,
+      qcResults: {
+        actualLength: 50,
+        variance: { Wattage: '400W', Efficiency: '21%' }
+      }
     });
-  }, 1800);
+  }, 2400);
 };
 
 runDemo().catch((error) => {

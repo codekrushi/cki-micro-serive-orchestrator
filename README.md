@@ -39,7 +39,15 @@ npm start
 - `InventoryService` reserves stock and later publishes `QC_PASSED`
 - `BillingService` calculates invoice and leakage after QC approval
 - `DispatchService` simulates barcode generation and dispatch readiness
+- `IdentityService` issues JWT tokens with roles, tenantId, and permissions
+- `API Gateway` validates JWTs, applies rate limiting, and routes requests through the service layer
 - The MongoDB order model stores `metadata` dynamically, so textile and solar domains can coexist without schema migrations
+
+## API demo endpoints
+
+- Identity service: `POST http://localhost:4001/auth/login`
+- API gateway: `POST http://localhost:3000/api/sales/orders`
+- API gateway: `POST http://localhost:3000/api/qc/approve`
 
 ## Demo flow
 
