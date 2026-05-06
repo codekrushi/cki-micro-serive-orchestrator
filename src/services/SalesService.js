@@ -19,6 +19,14 @@ const createSalesOrder = async (orderData) => {
   return newOrder;
 };
 
+broker.subscribe('ORDER_COMPENSATION_REQUIRED', async (data) => {
+    console.log(`[Sales] Rolling back Order: ${data.orderId}. Reason: ${data.reason}`);
+    await Order.findByIdAndUpdate(data.orderId, { 
+        status: 'CANCELLED_SYSTEM',
+        reason: data.reason 
+    });
+});
+
 module.exports = {
   createSalesOrder
 };

@@ -70,22 +70,7 @@ const createOrder = async (token, orderPayload) => {
   );
 };
 
-const approveQc = async (token, approvalPayload) => {
-  return sendJsonRequest(
-    {
-      hostname: 'localhost',
-      port: 3000,
-      path: '/api/qc/approve',
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
-    },
-    approvalPayload
-  );
-};
-
-const runDemo = async () => {
+const runSagaDemo = async () => {
   await connectDb();
   await startIdentityServer();
   await startApiGateway();
@@ -94,62 +79,51 @@ const runDemo = async () => {
   billingService.initBillingListeners();
   dispatchService.initDispatchListeners();
 
-  console.log('[Demo] Logging in Sales user');
+  console.log('[Saga Demo] Logging in Sales user');
   const salesAuth = await login('sales@tenant101.local', 'Sales123!');
 
-  const textileOrderPayload = {
-    articleId: 'ARTICLE-RED-1000',
-    quantity: 1000,
+  // Demo case 1: Stock failure - Saga rollback from Inventory
+  const stockFailOrderPayload = {
+    articleId: 'FABRIC_STOCK_FAIL',
+    quantity: 100,
     dynamicAttributes: {
       domain: 'textile',
       GSM: 180,
       Composition: 'Cotton',
-      ShadePreference: 'Maroon'
+      ShadePreference: 'Red'
     }
   };
 
-  const createdTextileOrder = await createOrder(salesAuth.token, textileOrderPayload);
-  console.log(`\n[Demo] Created textile sales order ${createdTextileOrder.order._id} via API Gateway`);
+  console.log('\n[Saga Demo] Creating order that will fail at stock check (Saga rollback)');
+  const stockFailOrder = await createOrder(salesAuth.token, stockFailOrderPayload);
+  console.log(`[Saga Demo] Created failing stock order ${stockFailOrder.order._id} - expect compensation`);
 
-  const solarOrderPayload = {
-    articleId: 'ARTICLE-SOLAR-400W',
-    quantity: 50,
+  // Wait for compensation to complete
+  await new Promise(resolve => setTimeout(resolve, 1000));
+
+  // Demo case 2: Billing failure - Saga rollback from Billing
+  const billFailOrderPayload = {
+    articleId: 'FABRIC_BILL_FAIL',
+    quantity: 100,
     dynamicAttributes: {
-      domain: 'solar',
-      Wattage: '400W',
-      CellType: 'Monocrystalline',
-      MountType: 'Rooftop'
+      domain: 'textile',
+      GSM: 180,
+      Composition: 'Cotton',
+      ShadePreference: 'Blue'
     }
   };
 
-  const createdSolarOrder = await createOrder(salesAuth.token, solarOrderPayload);
-  console.log(`\n[Demo] Created solar sales order ${createdSolarOrder.order._id} via API Gateway`);
+  console.log('\n[Saga Demo] Creating order that will fail at billing (Saga rollback)');
+  const billFailOrder = await createOrder(salesAuth.token, billFailOrderPayload);
+  console.log(`[Saga Demo] Created failing billing order ${billFailOrder.order._id} - expect compensation`);
 
-  setTimeout(async () => {
-    console.log('[Demo] Logging in QC user');
-    const qcAuth = await login('qc@tenant101.local', 'QC123!');
-    await approveQc(qcAuth.token, {
-      orderId: createdTextileOrder.order._id,
-      qcResults: {
-        actualLength: 980,
-        variance: { GSM: 2, width: 0.5 }
-      }
-    });
-  }, 120);
+  // Wait for compensation to complete
+  await new Promise(resolve => setTimeout(resolve, 1000));
 
-  setTimeout(async () => {
-    const qcAuth = await login('qc@tenant101.local', 'QC123!');
-    await approveQc(qcAuth.token, {
-      orderId: createdSolarOrder.order._id,
-      qcResults: {
-        actualLength: 50,
-        variance: { Wattage: '400W', Efficiency: '21%' }
-      }
-    });
-  }, 120);
+  console.log('[Saga Demo] Saga failure demonstration complete');
 };
 
-runDemo().catch((error) => {
-  console.error('[Demo] Error:', error);
+runSagaDemo().catch((error) => {
+  console.error('[Saga Demo] Error:', error);
   process.exit(1);
 });

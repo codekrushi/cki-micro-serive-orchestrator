@@ -4,6 +4,7 @@
   "description": "Demo Node.js microservice orchestration with MongoDB and Redis Pub/Sub.",
   "main": "src/demo.js",
   "scripts": {
+    "start-saga": "node src/saga-demo.js",
     "start": "node src/demo.js",
     "dev": "nodemon src/demo.js"
   },
